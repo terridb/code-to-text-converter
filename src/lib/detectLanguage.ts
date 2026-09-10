@@ -36,11 +36,12 @@ const RULES: Partial<Record<SupportedLang, Rule[]>> = {
     ],
     yaml: [
         {pattern: /^---\s*$/m, weight: 4},
-        // Excludes lines ending in ';' so CSS declarations ("border: 1px solid;")
-        // don't get mistaken for YAML "key: value" pairs.
-        {pattern: /^\s*[\w.-]+:(?:\s*$|\s+[^;\n]*$)/m, weight: 2},
+        // Excludes lines ending in ';' or ',' so CSS declarations
+        // ("border: 1px solid;") and JS/JSON object properties
+        // ("name: 'Davy Klaassen',") don't get mistaken for YAML "key: value" pairs.
+        {pattern: /^\s*[\w.-]+:(?:\s*$|\s+[^;,\n]*$)/m, weight: 2},
         {pattern: /^\s*-\s+[\w.-]+:\s/m, weight: 2},
-        {pattern: /^\s{2,}[\w.-]+:(?:\s*$|\s+[^;\n]*$)/m, weight: 2},
+        {pattern: /^\s{2,}[\w.-]+:(?:\s*$|\s+[^;,\n]*$)/m, weight: 2},
     ],
     sql: [
         {pattern: /\bSELECT\b[\s\S]*\bFROM\b/i, weight: 4},
@@ -77,6 +78,16 @@ const RULES: Partial<Record<SupportedLang, Rule[]>> = {
         {pattern: /\bsudo\b|\bapt-get\b|\bnpm run\b/, weight: 1},
         {pattern: /\$\{?\w+\}?/, weight: 1},
         {pattern: /^\s*echo\b/m, weight: 3},
+        // Plain CLI invocations ("nodemon app.js", "git status", "npm install")
+        // carry none of the shell-scripting signals above, so recognize common
+        // command-line tool names at the start of a line too.
+        // Ordinary English words ("cat", "go", "make", "cargo"...) are deliberately
+        // excluded even though they're also CLI tool names, since a prose line
+        // starting with one would otherwise be misdetected as bash.
+        {
+            pattern: /^\s*(npm|npx|yarn|pnpm|node|nodemon|python3?|pip3?|git|docker|docker-compose|kubectl|ssh|scp|curl|wget|chmod|chown|mkdir|rmdir|cp|mv|ls|cd|touch|tar|mvn|gradle|systemctl|brew|apt-get|apt|yum|dnf|choco|winget)\b/m,
+            weight: 3,
+        },
     ],
     python: [
         {pattern: /^\s*def\s+\w+\s*\(.*\)\s*:/m, weight: 4},
