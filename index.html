@@ -8,10 +8,10 @@
     <script>
       (function () {
         try {
-          var pref = localStorage.getItem('theme-preference') || 'system'
-          var resolved = pref === 'system'
-            ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
-            : pref
+          const pref = localStorage.getItem('theme-preference') || 'system';
+          const resolved = pref === 'system'
+                  ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+                  : pref;
           document.documentElement.setAttribute('data-theme', resolved)
         } catch (e) {}
       })()
