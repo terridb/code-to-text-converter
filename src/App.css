@@ -246,6 +246,7 @@ textarea {
 
   .pane {
     width: 100%;
+    flex-shrink: 0;
   }
 
   .source-pane {
