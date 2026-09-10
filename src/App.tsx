@@ -33,6 +33,11 @@ function App() {
     )
     const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() => resolveTheme(themePreference))
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+    // Paste sets this synchronously so the applyCode() triggered by the input
+    // event right after it can force re-detection, even if a manual language
+    // pick had turned autoDetect off — a ref (not state) because the two
+    // events fire in the same tick, before a state update would be visible.
+    const forcePasteDetectRef = useRef(false)
 
     // Applies the resolved theme to the document and follows the OS setting
     // live whenever the preference is 'system'.
@@ -95,14 +100,20 @@ function App() {
     // manually, re-guesses the language from its content.
     const applyCode = (next: string) => {
         setCode(next)
+        const forcedByPaste = forcePasteDetectRef.current
+        forcePasteDetectRef.current = false
         if (next.trim() === '') {
             // Nothing left to go on, so let auto-detect resume on the next paste.
             setAutoDetect(true)
             return
         }
-        if (!autoDetect) return
+        if (!autoDetect && !forcedByPaste) return
         const detected = detectLanguage(next)
-        if (detected && detected !== lang) setLang(detected)
+        if (!detected) return
+        if (detected !== lang) setLang(detected)
+        // A confident detection from pasted content means new, unambiguous
+        // code arrived — worth trusting over a stale manual pick.
+        if (forcedByPaste) setAutoDetect(true)
     }
 
     // Or dismiss it immediately once the user changes what they'd be copying.
@@ -115,6 +126,16 @@ function App() {
         setStatus(null)
         setAutoDetect(false)
         setLang(e.target.value as SupportedLang)
+    }
+
+    const handlePaste = () => {
+        forcePasteDetectRef.current = true
+    }
+
+    const handleClear = () => {
+        setStatus(null)
+        applyCode('')
+        textareaRef.current?.focus()
     }
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -172,12 +193,21 @@ function App() {
                 <section className="pane source-pane">
                     <div className="pane-head">
                         <label className="pane-label" htmlFor="code-input">Source</label>
+                        <button
+                            type="button"
+                            className="clear-btn"
+                            onClick={handleClear}
+                            disabled={!code}
+                        >
+                            Clear
+                        </button>
                     </div>
                     <textarea
                         id="code-input"
                         ref={textareaRef}
                         value={code}
                         onChange={handleCodeChange}
+                        onPaste={handlePaste}
                         onKeyDown={handleKeyDown}
                         placeholder={placeholder}
                         spellCheck={false}
