@@ -12,7 +12,10 @@ const RULES: Partial<Record<SupportedLang, Rule[]>> = {
         {pattern: /<!doctype html>/i, weight: 6},
         {pattern: /<\/[a-z][\w-]*>/i, weight: 3},
         {pattern: /<[a-z][\w-]*(\s[^<>]*)?\/?>/i, weight: 2},
-        {pattern: /<(html|head|body|div|span|section|article|button|input)\b/i, weight: 3},
+        {
+            pattern: /<(html|head|body|div|span|section|article|nav|header|footer|main|aside|button|input|script|style|link|meta|title|form|label|select|option|textarea|table|thead|tbody|tr|td|th|ul|ol|li|img|a|h[1-6]|p)\b/i,
+            weight: 3,
+        },
     ],
     xml: [
         {pattern: /<\?xml\s+version=/i, weight: 6},
@@ -33,9 +36,11 @@ const RULES: Partial<Record<SupportedLang, Rule[]>> = {
     ],
     yaml: [
         {pattern: /^---\s*$/m, weight: 4},
-        {pattern: /^\s*[\w.-]+:\s*(\S.*)?$/m, weight: 2},
+        // Excludes lines ending in ';' so CSS declarations ("border: 1px solid;")
+        // don't get mistaken for YAML "key: value" pairs.
+        {pattern: /^\s*[\w.-]+:(?:\s*$|\s+[^;\n]*$)/m, weight: 2},
         {pattern: /^\s*-\s+[\w.-]+:\s/m, weight: 2},
-        {pattern: /^\s{2,}[\w.-]+:\s*(\S.*)?$/m, weight: 2},
+        {pattern: /^\s{2,}[\w.-]+:(?:\s*$|\s+[^;\n]*$)/m, weight: 2},
     ],
     sql: [
         {pattern: /\bSELECT\b[\s\S]*\bFROM\b/i, weight: 4},
