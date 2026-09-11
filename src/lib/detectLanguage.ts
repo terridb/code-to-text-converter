@@ -7,6 +7,32 @@ type Rule = {
 
 const MIN_SCORE = 3
 
+const TYPESCRIPT_RULES: Rule[] = [
+    {pattern: /\binterface\s+\w+/, weight: 4},
+    {pattern: /\btype\s+\w+\s*=/, weight: 3},
+    {pattern: /\bimplements\s+\w+/, weight: 3},
+    {pattern: /\benum\s+\w+/, weight: 3},
+    {pattern: /:\s*(string|number|boolean|any|void|unknown|never)\b/, weight: 3},
+    {pattern: /\bas\s+\w+\b/, weight: 1},
+    {pattern: /<\w+>\(/, weight: 1},
+]
+
+const JSX_RULES: Rule[] = [
+    // A tag right after "return" or "=>" is a JSX expression, not markup —
+    // HTML and plain JS/TS never produce this sequence.
+    {pattern: /\breturn\s*\(?\s*\n?\s*</, weight: 5},
+    {pattern: /=>\s*\(?\s*\n?\s*</, weight: 4},
+    // Interpolated JSX text/attribute: ">{...}<" or attr={...}.
+    {pattern: />\s*\{[^{}]*}\s*</, weight: 3},
+    {pattern: /\b[a-zA-Z-]+=\{[^{}]*}/, weight: 3},
+    {pattern: /\bclassName=/, weight: 3},
+    {pattern: /<[A-Z]\w*(\s[^<>]*)?\/?>/, weight: 4},
+    {pattern: /<\/[A-Z]\w*>/, weight: 3},
+    {pattern: /<>[\s\S]*<\/>/, weight: 3},
+    {pattern: /\bfrom\s+['"]react(-dom)?['"]/, weight: 4},
+    {pattern: /\bon[A-Z]\w*=\{/, weight: 3},
+]
+
 const RULES: Partial<Record<SupportedLang, Rule[]>> = {
     html: [
         {pattern: /<!doctype html>/i, weight: 6},
@@ -106,15 +132,7 @@ const RULES: Partial<Record<SupportedLang, Rule[]>> = {
         {pattern: /;\s*$/m, weight: 1},
         {pattern: /\bvoid\s+\w+\s*\(/, weight: 3},
     ],
-    typescript: [
-        {pattern: /\binterface\s+\w+/, weight: 4},
-        {pattern: /\btype\s+\w+\s*=/, weight: 3},
-        {pattern: /\bimplements\s+\w+/, weight: 3},
-        {pattern: /\benum\s+\w+/, weight: 3},
-        {pattern: /:\s*(string|number|boolean|any|void|unknown|never)\b/, weight: 3},
-        {pattern: /\bas\s+\w+\b/, weight: 1},
-        {pattern: /<\w+>\(/, weight: 1},
-    ],
+    typescript: TYPESCRIPT_RULES,
     javascript: [
         {pattern: /\b(const|let|var)\s+\w+\s*=/, weight: 3},
         {pattern: /=>\s*[{(]?/, weight: 3},
@@ -125,6 +143,15 @@ const RULES: Partial<Record<SupportedLang, Rule[]>> = {
         {pattern: /\bmodule\.exports\b/, weight: 3},
         {pattern: /\bdocument\.|\bwindow\./, weight: 1},
     ],
+    // Structural markers for a tag sitting in JS/TS expression position
+    // (after "return"/"=>", used as a value, or interpolated with "{}"),
+    // rather than the bare "looks like a tag" signals HTML's rules use —
+    // those alone can't tell HTML apart from markup embedded in JS/TS.
+    // 'tsx' has no rules of its own: it's resolved below as "jsx wins, and
+    // TypeScript-only signals also fired" rather than scored directly —
+    // scoring it as jsx ∪ typescript would always tie-or-beat jsx's own
+    // score and 'tsx' would win every JSX match, TS syntax or not.
+    jsx: JSX_RULES,
 }
 
 function isLikelyJson(trimmed: string): boolean {
@@ -137,6 +164,38 @@ function isLikelyJson(trimmed: string): boolean {
     }
 }
 
+// A line starting a bare, top-level JS statement — not markup, not inside a
+// tag. Deliberately narrower than the 'javascript' scoring rules: this only
+// needs to catch the common "here's the element, here's the JS for it"
+// snippets, not flag every JS-looking line.
+const BARE_JS_LINE = /^(const|let|var)\s+\w+\s*=|^function\s+\w+\s*\(|^document\.\w|^window\.\w|^console\.\w+\(/
+const TAG_LINE = /^<\/?[a-zA-Z][\w-]*(\s[^<>]*)?\/?>/
+
+// Detects "an HTML tag on its own line, plus an unrelated bare JS statement
+// on another" — a combo that's neither valid JSX (the tag isn't inside a JS
+// expression) nor a <script>-embedded HTML file, so no single grammar can
+// highlight it. <script>-embedded code is left to the normal 'html' rules,
+// which already handle that correctly.
+function looksLikeMixedHtmlJs(trimmed: string): boolean {
+    if (/<script\b/i.test(trimmed)) return false
+    let hasTagLine = false
+    let hasJsLine = false
+    for (const raw of trimmed.split(/\r?\n/)) {
+        const line = raw.trim()
+        if (line === '') continue
+        if (TAG_LINE.test(line)) hasTagLine = true
+        else if (BARE_JS_LINE.test(line)) hasJsLine = true
+    }
+    return hasTagLine && hasJsLine
+}
+
+function scoreOf(lang: Exclude<SupportedLang, 'json' | 'tsx' | 'html+js'>, trimmed: string): number {
+    return (RULES[lang] ?? []).reduce(
+        (total, {pattern, weight}) => (pattern.test(trimmed) ? total + weight : total),
+        0,
+    )
+}
+
 // Guesses the language of `code` from a handful of syntax fingerprints.
 // Returns null when the input is too short or too ambiguous to call.
 export function detectLanguage(code: string): SupportedLang | null {
@@ -145,27 +204,47 @@ export function detectLanguage(code: string): SupportedLang | null {
 
     if (isLikelyJson(trimmed)) return 'json'
 
+    // Checked before jsx/html scoring: a real JSX match (tag inside a JS
+    // expression) always scores > 0 on jsx's own rules, so this only catches
+    // the case those rules correctly leave unscored.
+    if (looksLikeMixedHtmlJs(trimmed) && scoreOf('jsx', trimmed) === 0) return 'html+js'
+
     const scores = SUPPORTED_LANGS
-        .filter((lang): lang is Exclude<SupportedLang, 'json'> => lang !== 'json')
-        .map((lang) => {
-            const score = (RULES[lang] ?? []).reduce(
-                (total, {pattern, weight}) => (pattern.test(trimmed) ? total + weight : total),
-                0,
-            )
-            return [lang, score] as const
-        })
+        .filter((lang): lang is Exclude<SupportedLang, 'json' | 'tsx' | 'html+js'> => lang !== 'json' && lang !== 'tsx' && lang !== 'html+js')
+        .map((lang) => [lang, scoreOf(lang, trimmed)] as const)
 
     const maxScore = Math.max(...scores.map(([, score]) => score))
     if (maxScore < MIN_SCORE) return null
 
     const topLangs = scores.filter(([, score]) => score === maxScore).map(([lang]) => lang)
-    if (topLangs.length === 1) return topLangs[0]
 
-    // TypeScript syntax is a superset of JavaScript's, so a tied score between
-    // the two just means the TS-only signals didn't fire — prefer TS anyway.
-    if (topLangs.length === 2 && topLangs.includes('javascript') && topLangs.includes('typescript')) {
-        return 'typescript'
-    }
+    const winner = ((): Exclude<SupportedLang, 'json' | 'tsx' | 'html+js'> | null => {
+        if (topLangs.length === 1) return topLangs[0]
 
-    return null
+        // jsx's rules only fire on genuine JSX-expression structure (a tag in
+        // return/arrow position, interpolation, etc.), so a tie against a
+        // plainer bucket (html/javascript/typescript) that reached the same
+        // score off its own weaker signals should still go to jsx.
+        if (topLangs.includes('jsx')) return 'jsx'
+
+        // TypeScript syntax is a superset of JavaScript's, so a tied score
+        // between the two just means the TS-only signals didn't fire —
+        // prefer TS anyway.
+        if (topLangs.length === 2 && topLangs.includes('javascript') && topLangs.includes('typescript')) {
+            return 'typescript'
+        }
+
+        return null
+    })()
+
+    if (winner !== 'jsx') return winner
+
+    // A .tsx file is "jsx" plus actual TypeScript syntax — promote only when
+    // TS-specific signals fired for real, not just because 'typescript'
+    // happened to tie jsx's score off unrelated content.
+    const tsScore = scoreOf('typescript', trimmed)
+    const jsScore = scoreOf('javascript', trimmed)
+    if (tsScore > 0 && tsScore >= jsScore) return 'tsx'
+
+    return 'jsx'
 }

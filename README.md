@@ -13,7 +13,7 @@ Paste a code snippet, get it back as syntax-highlighted rich text you can paste 
 
 ## Supported languages
 
-HTML, CSS, JavaScript, TypeScript, JSON, Bash, Python, Java, Markdown, Docker, XML, Properties, Kotlin, YAML, SQL
+HTML, CSS, JavaScript, TypeScript, JSX, TSX, HTML+JS (mixed markup and bare JS statements, e.g. DOM-manipulation snippets), JSON, Bash, Python, Java, Markdown, Docker, XML, Properties, Kotlin, YAML, SQL
 
 ## Getting started
 
