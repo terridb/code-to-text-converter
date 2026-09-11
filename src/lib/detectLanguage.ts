@@ -30,6 +30,9 @@ const JSX_RULES: Rule[] = [
     {pattern: />\s*\{[^{}]*}\s*</, weight: 3},
     {pattern: /\b[a-zA-Z-]+=\{[^{}]*}/, weight: 3},
     {pattern: /\bclassName=/, weight: 3},
+    // Spread props ("<input {...register(...)} />") — bounded lookahead so
+    // an unrelated object spread much later in a mixed paste doesn't count.
+    {pattern: /<[a-zA-Z][\w.-]*[\s\S]{0,300}?\{\s*\.\.\.\w+/, weight: 6},
     {pattern: /<[A-Z]\w*(\s[^<>]*)?\/?>/, weight: 4},
     {pattern: /<\/[A-Z]\w*>/, weight: 3},
     {pattern: /<>[\s\S]*<\/>/, weight: 3},
@@ -41,7 +44,11 @@ const RULES: Partial<Record<SupportedLang, Rule[]>> = {
     html: [
         {pattern: /<!doctype html>/i, weight: 6},
         {pattern: /<\/[a-z][\w-]*>/i, weight: 3},
-        {pattern: /<[a-z][\w-]*(\s[^<>]*)?\/?>/i, weight: 2},
+        // (?<!=) keeps an embedded arrow function's "=>" from being read as
+        // this tag's closing ">" — [^<>]* can't skip over it (">" is
+        // excluded from the class), so disallowing that particular ">" makes
+        // the whole match correctly fail instead of matching mid-arrow.
+        {pattern: /<[a-z][\w-]*(\s[^<>]*)?(?<!=)\/?>/i, weight: 2},
         {
             pattern: /<(html|head|body|div|span|section|article|nav|header|footer|main|aside|button|input|script|style|link|meta|title|form|label|select|option|textarea|table|thead|tbody|tr|td|th|ul|ol|li|img|a|h[1-6]|p)\b/i,
             weight: 3,
