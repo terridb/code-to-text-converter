@@ -73,12 +73,16 @@ const RULES: Partial<Record<SupportedLang, Rule[]>> = {
     ],
     yaml: [
         {pattern: /^---\s*$/m, weight: 4},
-        // Excludes lines ending in ';' or ',' so CSS declarations
-        // ("border: 1px solid;") and JS/JSON object properties
-        // ("name: 'Davy Klaassen',") don't get mistaken for YAML "key: value" pairs.
-        {pattern: /^\s*[\w.-]+:(?:\s*$|\s+[^;,\n]*$)/m, weight: 2},
+        // Excludes lines ending in ';', ',', '{' or '[' so CSS declarations
+        // ("border: 1px solid;"), JS/JSON object properties
+        // ("name: 'Davy Klaassen',"), and JS/JSON properties whose value is
+        // itself an object/array opening on the same line
+        // ("defaultValues: {") don't get mistaken for YAML "key: value" pairs
+        // — none of those trailing characters end a valid YAML block-style
+        // scalar value.
+        {pattern: /^\s*[\w.-]+:(?:\s*$|\s+[^;,{[\n]*$)/m, weight: 2},
         {pattern: /^\s*-\s+[\w.-]+:\s/m, weight: 2},
-        {pattern: /^\s{2,}[\w.-]+:(?:\s*$|\s+[^;,\n]*$)/m, weight: 2},
+        {pattern: /^\s{2,}[\w.-]+:(?:\s*$|\s+[^;,{[\n]*$)/m, weight: 2},
     ],
     sql: [
         {pattern: /\bSELECT\b[\s\S]*\bFROM\b/i, weight: 4},
