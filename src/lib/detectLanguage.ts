@@ -19,9 +19,13 @@ const TYPESCRIPT_RULES: Rule[] = [
 
 const JSX_RULES: Rule[] = [
     // A tag right after "return" or "=>" is a JSX expression, not markup —
-    // HTML and plain JS/TS never produce this sequence.
-    {pattern: /\breturn\s*\(?\s*\n?\s*</, weight: 5},
-    {pattern: /=>\s*\(?\s*\n?\s*</, weight: 4},
+    // HTML and plain JS/TS never produce this sequence. Weighted above
+    // html's fixed ceiling of 8 (3 non-doctype pattern buckets, each counted
+    // once no matter how many tags match) so plain HTML-only JSX — a
+    // component returning nothing but native tags, no className/react
+    // import/curly-brace attrs — still wins over html on this signal alone.
+    {pattern: /\breturn\s*\(?\s*\n?\s*</, weight: 9},
+    {pattern: /=>\s*\(?\s*\n?\s*</, weight: 9},
     // Interpolated JSX text/attribute: ">{...}<" or attr={...}.
     {pattern: />\s*\{[^{}]*}\s*</, weight: 3},
     {pattern: /\b[a-zA-Z-]+=\{[^{}]*}/, weight: 3},
